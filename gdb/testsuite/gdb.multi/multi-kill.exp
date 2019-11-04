@@ -1,0 +1,84 @@
+# This testcase is part of GDB, the GNU debugger.
+
+# Copyright 2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Test receiving TARGET_WAITKIND_SIGNALLED events from multiple
+# inferiors.  In all stop-mode, upon receiving the exit event from one
+# of the inferiors, GDB will try to stop the other inferior, too.  So,
+# a stop request will be sent.  Receiving a TARGET_WAITKIND_SIGNALLED
+# status kind as a response to that stop request instead of a
+# TARGET_WAITKIND_STOPPED should be handled by GDB without problems.
+
+standard_testfile
+
+# This is a test specific for native GDB's ability to stop all
+# threads.
+if {![can_spawn_for_attach]} {
+    return 0
+}
+
+if {[prepare_for_testing "failed to prepare" $testfile $srcfile]} {
+    return -1
+}
+
+gdb_test "add-inferior -exec $binfile" "Added inferior 2.*" \
+    "add the second inferior"
+
+# We want both processes in a running state.
+gdb_test_no_output "set schedule-multiple on"
+
+proc test {} {
+    # Start the programs, attach to them, then kill both from outside.
+    global binfile
+    global gdb_prompt
+
+    set spawn_id_list [spawn_wait_for_attach [list $binfile $binfile]]
+    set test_spawn_id1 [lindex $spawn_id_list 0]
+    set test_spawn_id2 [lindex $spawn_id_list 1]
+    set testpid1 [spawn_id_get_pid $test_spawn_id1]
+    set testpid2 [spawn_id_get_pid $test_spawn_id2]
+
+    gdb_test "inferior 1" ".*Switching to inferior 1.*"
+
+    gdb_test "attach $testpid1" \
+	"Attaching to program: .*, process $testpid1.*(in|at).*" \
+	"attach to program 1"
+
+    gdb_test "inferior 2" ".*Switching to inferior 2.*"
+
+    gdb_test "attach $testpid2" \
+	"Attaching to program: .*, process $testpid2.*(in|at).*" \
+	"attach to program 2"
+
+    gdb_test_multiple "continue" "continue processes" {
+	-re "Continuing.\[\r\n\]+" {
+	    # Kill both processes at once.
+	    remote_exec build "kill -9 ${testpid1} ${testpid2}"
+	    exp_continue
+	}
+	-re "Program terminated with signal.*$gdb_prompt" {
+	    pass $gdb_test_name
+	}
+    }
+
+    # Make sure that the processes are gone.
+    kill_wait_spawned_process $test_spawn_id1
+    kill_wait_spawned_process $test_spawn_id2
+}
+
+with_test_prefix "iteration 1" test
+# Repeat to also test re-runnability.
+with_test_prefix "iteration 2" test

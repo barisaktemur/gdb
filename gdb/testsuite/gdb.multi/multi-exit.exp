@@ -1,0 +1,81 @@
+# This testcase is part of GDB, the GNU debugger.
+
+# Copyright 2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Test receiving TARGET_WAITKIND_EXITED events from multiple
+# inferiors.  In all stop-mode, upon receiving the exit event from one
+# of the inferiors, GDB will try to stop the other inferior, too.  So,
+# a stop request will be sent.  Receiving a TARGET_WAITKIND_EXITED
+# status kind as a response to that stop request instead of a
+# TARGET_WAITKIND_STOPPED should be handled by GDB without problems.
+
+standard_testfile
+
+# This is a test specific for native GDB's ability to stop all
+# threads.
+if {![can_spawn_for_attach]} {
+    return 0
+}
+
+if {[prepare_for_testing "failed to prepare" $testfile $srcfile]} {
+    return -1
+}
+
+gdb_test "add-inferior -exec $binfile" "Added inferior 2.*" \
+    "add the second inferior"
+
+proc test {} {
+    # Start the processes separately.
+    gdb_test_no_output "set schedule-multiple off"
+
+    gdb_test "inferior 1" ".*Switching to inferior 1.*"
+    if {![runto_main]} {
+	fail "starting inferior 1"
+	return -1
+    }
+
+    gdb_test "inferior 2" ".*Switching to inferior 2.*"
+    if {![runto_main]} {
+	fail "starting inferior 2"
+	return -1
+    }
+
+    # Now continue both processes.
+    gdb_test_no_output "set schedule-multiple on"
+
+    # We want GDB to complete the command and return the prompt
+    # instead of going into an infinite loop.
+    # Both inferiors exit.
+    global inferior_exited_re gdb_prompt
+    set count 0
+    gdb_test_multiple "continue" "continue" {
+	-re "$inferior_exited_re normally\]\[\r\n\]+" {
+	    incr count
+	    if {$count == 2} {
+		pass $gdb_test_name
+	    } else {
+		exp_continue
+	    }
+	}
+	-re "$gdb_prompt " {
+	    exp_continue
+	}
+    }
+}
+
+with_test_prefix "iteration 1" test
+# Repeat to also test re-runnability.
+with_test_prefix "iteration 2" test
