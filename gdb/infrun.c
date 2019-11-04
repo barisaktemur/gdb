@@ -4781,7 +4781,48 @@ stop_all_threads (void)
 	{
 	  int need_wait = 0;
 
-	  update_thread_list ();
+	  for (inferior *inf : all_non_exited_inferiors ())
+	    {
+	      switch_to_inferior_no_thread (inf);
+	      update_thread_list ();
+
+	      /* After updating the thread list, it's possible to end
+		 up with pid != 0 but no threads, if the inf's process
+		 has exited but we have not processed that event yet.
+		 The exit event must be waiting somewhere in the queue
+		 to be processed.  Silently add a thread so that we do
+		 a wait_one() below to pick the pending event.  */
+
+	      bool has_threads = false;
+	      for (thread_info *tp ATTRIBUTE_UNUSED
+		     : inf->non_exited_threads ())
+		{
+		  has_threads = true;
+		  break;
+		}
+
+	      if (has_threads)
+		continue;
+
+	      ptid_t ptid (inf->pid, inf->pid, 0);
+
+	      /* Re-surrect the thread, if not physically deleted.
+		 Add a new one otherwise.  */
+	      thread_info *t = find_thread_ptid (inf->process_target (), ptid);
+	      gdb_assert (t == nullptr || t->state == THREAD_EXITED);
+
+	      if (debug_infrun)
+		fprintf_unfiltered (gdb_stdlog, "infrun: stop_all_threads,"
+				    " inf (pid %d): %s a thread\n", inf->pid,
+				    (t == nullptr)
+				    ? "adding" : "resurrecting");
+
+	      if (t == nullptr)
+		t = add_thread_silent (inf->process_target (), ptid);
+
+	      set_executing (inf->process_target (), ptid, true);
+	      t->state = THREAD_STOPPED;
+	    }
 
 	  /* Go through all threads looking for threads that we need
 	     to tell the target to stop.  */
@@ -4856,13 +4897,61 @@ stop_all_threads (void)
 				  target_pid_to_str (event.ptid).c_str ());
 	    }
 
-	  if (event.ws.kind == TARGET_WAITKIND_NO_RESUMED
-	      || event.ws.kind == TARGET_WAITKIND_THREAD_EXITED
-	      || event.ws.kind == TARGET_WAITKIND_EXITED
-	      || event.ws.kind == TARGET_WAITKIND_SIGNALLED)
+	  if (event.ws.kind == TARGET_WAITKIND_NO_RESUMED)
 	    {
-	      /* All resumed threads exited
-		 or one thread/process exited/signalled.  */
+	      /* All resumed threads exited.  */
+	    }
+	  else if (event.ws.kind == TARGET_WAITKIND_THREAD_EXITED
+		   || event.ws.kind == TARGET_WAITKIND_EXITED
+		   || event.ws.kind == TARGET_WAITKIND_SIGNALLED)
+	    {
+	      /* One thread/process exited/signalled.  */
+
+	      thread_info *t = nullptr;
+
+	      /* The target may have reported just a pid.  If so, try
+		 the first non-exited thread.  */
+	      if (event.ptid.is_pid ())
+		{
+		  int pid  = event.ptid.pid ();
+		  inferior *inf = find_inferior_pid (event.target, pid);
+		  for (thread_info *tp : inf->non_exited_threads ())
+		    {
+		      t = tp;
+		      break;
+		    }
+
+		  /* FIXME: If there is no available thread, the event
+		     would have to be appended to a per-inferior event
+		     list, which, unfortunately, does not exist yet.  We
+		     assert here instead of going into an infinite loop.  */
+		  gdb_assert (t != nullptr);
+
+		  if (debug_infrun)
+		    fprintf_unfiltered (gdb_stdlog,
+					"infrun: stop_all_threads, using %s\n",
+					target_pid_to_str (t->ptid).c_str ());
+		}
+	      else
+		{
+		  t = find_thread_ptid (event.target, event.ptid);
+		  /* Check if this is the first time we see this thread.
+		     Don't bother adding if it individually exited.  */
+		  if (t == nullptr
+		      && event.ws.kind != TARGET_WAITKIND_THREAD_EXITED)
+		    t = add_thread (event.target, event.ptid);
+		}
+
+	      if (t != nullptr)
+		{
+		  /* Set the threads as non-executing to avoid
+		     another stop attempt on them.  */
+		  switch_to_thread_no_regs (t);
+		  mark_non_executing_threads (event.target, event.ptid,
+					      event.ws);
+		  save_waitstatus (t, &event.ws);
+		  t->stop_requested = false;
+		}
 	    }
 	  else
 	    {
