@@ -4854,13 +4854,60 @@ stop_all_threads (void)
 				  target_pid_to_str (event.ptid).c_str ());
 	    }
 
-	  if (event.ws.kind == TARGET_WAITKIND_NO_RESUMED
-	      || event.ws.kind == TARGET_WAITKIND_THREAD_EXITED
-	      || event.ws.kind == TARGET_WAITKIND_EXITED
-	      || event.ws.kind == TARGET_WAITKIND_SIGNALLED)
+	  if (event.ws.kind == TARGET_WAITKIND_NO_RESUMED)
 	    {
-	      /* All resumed threads exited
-		 or one thread/process exited/signalled.  */
+	      /* All resumed threads exited.  */
+	    }
+	  else if (event.ws.kind == TARGET_WAITKIND_THREAD_EXITED
+		   || event.ws.kind == TARGET_WAITKIND_EXITED
+		   || event.ws.kind == TARGET_WAITKIND_SIGNALLED)
+	    {
+	      /* One thread/process exited/signalled.  */
+
+	      thread_info *t = nullptr;
+
+	      /* The target may have reported just a pid.  If so, try
+		 the first non-exited thread.  */
+	      if (event.ptid.is_pid ())
+		{
+		  int pid  = event.ptid.pid ();
+		  inferior *inf = find_inferior_pid (event.target, pid);
+		  for (thread_info *tp : inf->non_exited_threads ())
+		    {
+		      t = tp;
+		      break;
+		    }
+
+		  /* FIXME: If there is no available thread, the event
+		     would have to be appended to a per-inferior event
+		     list, which, unfortunately, does not exist yet.  We
+		     assert here instead of going into an infinite loop.  */
+		  gdb_assert (t != nullptr);
+
+		  if (debug_infrun)
+		    fprintf_unfiltered (gdb_stdlog,
+					"infrun: stop_all_threads, using %s\n",
+					target_pid_to_str (t->ptid).c_str ());
+		}
+	      else
+		{
+		  t = find_thread_ptid (event.target, event.ptid);
+		  /* Check if this is the first time we see this thread.
+		     Don't bother adding if it individually exited.  */
+		  if (t == nullptr
+		      && event.ws.kind != TARGET_WAITKIND_THREAD_EXITED)
+		    t = add_thread (event.target, event.ptid);
+		}
+
+	      if (t != nullptr)
+		{
+		  /* Set the threads as non-executing to avoid
+		     another stop attempt on them.  */
+		  mark_non_executing_threads (event.target, event.ptid,
+					      event.ws);
+		  save_waitstatus (t, &event.ws);
+		  t->stop_requested = false;
+		}
 	    }
 	  else
 	    {

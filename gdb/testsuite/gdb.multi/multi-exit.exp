@@ -1,0 +1,147 @@
+# This testcase is part of GDB, the GNU debugger.
+
+# Copyright 2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Test receiving TARGET_WAITKIND_EXITED events from multiple
+# inferiors.  In all stop-mode, upon receiving the exit event from one
+# of the inferiors, GDB will try to stop the other inferior, too.  So,
+# a stop request will be sent.  Receiving a TARGET_WAITKIND_EXITED
+# status kind as a response to that stop request instead of a
+# TARGET_WAITKIND_STOPPED should be handled by GDB without problems.
+
+load_lib gdbserver-support.exp
+
+if {[skip_gdbserver_tests]} {
+    return 0
+}
+
+standard_testfile
+
+# The plain remote target can't do multiple inferiors.
+if {[target_info gdb_protocol] != ""} {
+    return 0
+}
+
+if {[build_executable "failed to build" $testfile $srcfile {debug}] == -1} {
+    return -1
+}
+
+# Set up the current inferior with a gdbserver in multi mode as its
+# target, if TARGET is "extended-remote".  Otherwise the target is native.
+
+proc setup_inferior {target infnum} {
+    global binfile
+
+    gdb_test "file ${binfile}" ".*" "load file in inferior $infnum"
+
+    if {$target == "extended-remote"} {
+	gdb_test_no_output "set remote exec-file ${binfile}" \
+	    "set remote-exec file in inferior $infnum"
+	set res [gdbserver_start "--multi" ""]
+	set gdbserver_gdbport [lindex $res 1]
+	if {[gdb_target_cmd "extended-remote" $gdbserver_gdbport]} {
+	    return 0
+	}
+    }
+
+    if {![runto_main]} {
+	fail "starting inferior $infnum"
+	return 0
+    }
+    return 1
+}
+
+# Set up two inferiors and start the processes.  The underlying target
+# of each inferior is determined by the TARGET argument.
+
+proc setup {target} {
+    clean_restart
+
+    # This is a test specific for GDB's ability to stop all threads.
+    gdb_test_no_output "maint set target-non-stop on"
+
+    if {![setup_inferior $target 1]} {
+	return 0
+    }
+
+    gdb_test "add-inferior -no-connection" "Added inferior 2" \
+	"add the second inferior"
+    gdb_test "inferior 2" "Switching to inferior 2.*" \
+	"switch to inferior 2"
+
+    if {![setup_inferior $target 2]} {
+	return 0
+    }
+
+    # We want to continue both processes.
+    gdb_test_no_output "set schedule-multiple on"
+
+    return 1
+}
+
+# Run the test using TARGET as the target of the inferiors.
+
+proc test {target} {
+    if {![setup $target]} {
+	untested "could not do setup"
+	return
+    }
+
+    # We want GDB to complete the command and return the prompt
+    # instead of going into an infinite loop.
+    global decimal gdb_prompt inferior_exited_re
+    gdb_test_multiple "continue" "first continue" {
+	-re "Inferior ($decimal) \[^\n\r\]+ exited normally.*$gdb_prompt $" {
+	    set exited_inferior $expect_out(1,string)
+	    pass $gdb_test_name
+	}
+    }
+
+    if {![info exists exited_inferior]} {
+	fail "first continue"
+	return 0
+    }
+
+    if {$exited_inferior == 1} {
+	set other_inferior 2
+    } else {
+	set other_inferior 1
+    }
+
+    # Switch to the other inferior and check it, too, continues to the end.
+    gdb_test "inferior $other_inferior" \
+	".*Switching to inferior $other_inferior.*" \
+	"switch to the other inferior"
+
+    gdb_continue_to_end
+
+    # Finally, check if we can re-run both inferiors.
+    delete_breakpoints
+
+    gdb_test "run" "$inferior_exited_re normally\]" \
+	"re-run the other inferior"
+
+    gdb_test "inferior $exited_inferior" \
+	".*Switching to inferior $exited_inferior.*" \
+	"switch to the first exited inferior"
+
+    gdb_test "run" "$inferior_exited_re normally\]" \
+	"re-run the first exited inferior"
+}
+
+foreach_with_prefix target {"native" "extended-remote"} {
+    test $target
+}
