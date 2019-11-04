@@ -1,0 +1,110 @@
+# This testcase is part of GDB, the GNU debugger.
+
+# Copyright 2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Test receiving TARGET_WAITKIND_SIGNALLED events from multiple
+# inferiors.  In all stop-mode, upon receiving the exit event from one
+# of the inferiors, GDB will try to stop the other inferior, too.  So,
+# a stop request will be sent.  Receiving a TARGET_WAITKIND_SIGNALLED
+# status kind as a response to that stop request instead of a
+# TARGET_WAITKIND_STOPPED should be handled by GDB without problems.
+
+standard_testfile
+
+if {[use_gdb_stub]} {
+    return 0
+}
+
+if {[build_executable "failed to prepare" $testfile $srcfile {debug}]} {
+    return -1
+}
+
+# We are testing GDB's ability to stop all threads.
+# Hence, go with the all-stop-on-top-of-non-stop mode.
+save_vars { GDBFLAGS } {
+    append GDBFLAGS " -ex \"maint set target-non-stop on\""
+    clean_restart ${binfile}
+}
+
+# Initialize an inferior and return its pid.
+
+proc initialize_inferior {prefix} {
+    global binfile srcfile
+    with_test_prefix $prefix {
+	gdb_load $binfile
+
+	gdb_breakpoint "initialized" {temporary}
+	gdb_run_cmd
+	gdb_test "" ".*reakpoint ., initialized .*${srcfile}.*" "run"
+
+	return [get_integer_valueof "pid" -1]
+    }
+}
+
+set testpid1 [initialize_inferior "inf 1"]
+if {$testpid1 == -1} {
+    return -1
+}
+
+# Start another inferior.
+gdb_test "add-inferior" "Added inferior 2.*" \
+    "add empty inferior 2"
+gdb_test "inferior 2" "Switching to inferior 2.*" \
+    "switch to inferior 2"
+
+set testpid2 [initialize_inferior "inf 2"]
+if {$testpid2 == -1} {
+    return -1
+}
+
+# We want to continue both processes.
+gdb_test_no_output "set schedule-multiple on"
+
+# Resume, but then kill both from outside.
+gdb_test_multiple "continue" "continue processes" {
+    -re "Continuing.\[\r\n\]+" {
+	# Kill both processes at once.
+	remote_exec target "kill -9 ${testpid1} ${testpid2}"
+	exp_continue
+    }
+    -re "Program terminated with signal.*$gdb_prompt" {
+	pass $gdb_test_name
+    }
+}
+
+# Find the current inferior's id.
+set current_inferior 1
+gdb_test_multiple "info inferiors" "find the current inf id" {
+    -re "\\* 1 .*$gdb_prompt $" {
+	set current_inferior 1
+	set other_inferior 2
+	pass $gdb_test_name
+    }
+    -re "\\* 2 .*$gdb_prompt $" {
+	set current_inferior 2
+	set other_inferior 1
+	pass $gdb_test_name
+    }
+}
+
+# Switch to the other inferior and check it, too, continues to the end.
+gdb_test "inferior $other_inferior" \
+    ".*Switching to inferior $other_inferior.*" \
+    "switch to the other inferior"
+
+gdb_test "continue" \
+    "Program terminated with signal SIGKILL, .*" \
+    "continue the other inferior"
