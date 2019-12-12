@@ -57,6 +57,8 @@ extern struct lynx_target_ops the_low_target;
 class lynx_process_target : public process_target {
 public:
 
+  int create_inferior (const char *program,
+		       const std::vector<char *> &program_args) override;
 };
 
 /* The inferior's target description.  This is a global because the
