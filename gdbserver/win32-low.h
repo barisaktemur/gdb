@@ -114,6 +114,8 @@ public:
   int kill (process_info *proc) override;
 
   int detach (process_info *proc) override;
+
+  void mourn (process_info *proc) override;
 };
 
 /* Retrieve the context for this thread, if not already retrieved.  */
