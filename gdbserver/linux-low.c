@@ -6068,11 +6068,17 @@ linux_process_target::stopped_data_address ()
    the target has different ways of acquiring this information, like
    loadmaps.  */
 
+bool
+linux_process_target::supports_read_offsets ()
+{
+  return true;
+}
+
 /* Under uClinux, programs are loaded at non-zero offsets, which we need
    to tell gdb about.  */
 
-static int
-linux_read_offsets (CORE_ADDR *text_p, CORE_ADDR *data_p)
+int
+linux_process_target::read_offsets (CORE_ADDR *text_p, CORE_ADDR *data_p)
 {
   unsigned long text, text_end, data;
   int pid = lwpid_of (current_thread);
@@ -7375,13 +7381,6 @@ linux_get_hwcap2 (int wordsize)
 static linux_process_target the_linux_target;
 
 static process_stratum_target linux_target_ops = {
-#if defined(__UCLIBC__) && defined(HAS_NOMMU)	      \
-    && defined(PT_TEXT_ADDR) && defined(PT_DATA_ADDR) \
-    && defined(PT_TEXT_END_ADDR)
-  linux_read_offsets,
-#else
-  NULL,
-#endif
 #ifdef USE_THREAD_DB
   thread_db_get_tls_address,
 #else

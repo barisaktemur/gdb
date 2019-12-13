@@ -335,6 +335,14 @@ public:
   bool stopped_by_watchpoint () override;
 
   CORE_ADDR stopped_data_address () override;
+
+#if defined(__UCLIBC__) && defined(HAS_NOMMU)	      \
+    && defined(PT_TEXT_ADDR) && defined(PT_DATA_ADDR) \
+    && defined(PT_TEXT_END_ADDR)
+  bool supports_read_offsets () override;
+
+  int read_offsets (CORE_ADDR *text, CORE_ADDR *data) override;
+#endif
 };
 
 #define get_thread_lwp(thr) ((struct lwp_info *) (thread_target_data (thr)))
