@@ -103,8 +103,6 @@ typedef BOOL (WINAPI *winapi_DebugSetProcessKillOnExit) (BOOL KillOnExit);
 typedef BOOL (WINAPI *winapi_DebugBreakProcess) (HANDLE);
 typedef BOOL (WINAPI *winapi_GenerateConsoleCtrlEvent) (DWORD, DWORD);
 
-static ptid_t win32_wait (ptid_t ptid, struct target_waitstatus *ourstatus,
-			  int options);
 static void win32_resume (struct thread_resume *resume_info, size_t n);
 #ifndef _WIN32_WCE
 static void win32_add_all_dlls (void);
@@ -380,7 +378,7 @@ do_initial_child_stuff (HANDLE proch, DWORD pid, int attached)
     {
       struct target_waitstatus status;
 
-      win32_wait (minus_one_ptid, &status, 0);
+      the_target->pt->wait (minus_one_ptid, &status, 0);
 
       /* Note win32_wait doesn't return thread events.  */
       if (status.kind != TARGET_WAITKIND_LOADED)
@@ -707,7 +705,7 @@ win32_process_target::create_inferior (
 
   /* Wait till we are at 1st instruction in program, return new pid
      (assuming success).  */
-  cs.last_ptid = win32_wait (ptid_t (current_process_id), &cs.last_status, 0);
+  cs.last_ptid = wait (ptid_t (current_process_id), &cs.last_status, 0);
 
   return current_process_id;
 }
@@ -1600,8 +1598,9 @@ get_child_debug_event (struct target_waitstatus *ourstatus)
 /* Wait for the inferior process to change state.
    STATUS will be filled in with a response code to send to GDB.
    Returns the signal which caused the process to stop. */
-static ptid_t
-win32_wait (ptid_t ptid, struct target_waitstatus *ourstatus, int options)
+ptid_t
+win32_process_target::wait (ptid_t ptid, target_waitstatus *ourstatus,
+			    int options)
 {
   struct regcache *regcache;
 
@@ -1828,7 +1827,6 @@ win32_sw_breakpoint_from_kind (int kind, int *size)
 static win32_process_target the_win32_target;
 
 static process_stratum_target win32_target_ops = {
-  win32_wait,
   win32_fetch_inferior_registers,
   win32_store_inferior_registers,
   NULL, /* prepare_to_access_memory */

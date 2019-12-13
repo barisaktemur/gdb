@@ -505,8 +505,9 @@ retry:
 /* A wrapper around lynx_wait_1 that also prints debug traces when
    such debug traces have been activated.  */
 
-static ptid_t
-lynx_wait (ptid_t ptid, struct target_waitstatus *status, int options)
+ptid_t
+lynx_process_target::wait (ptid_t ptid, target_waitstatus *status,
+			   int options)
 {
   ptid_t new_ptid;
 
@@ -726,7 +727,6 @@ static lynx_process_target the_lynx_target;
 /* The LynxOS target_ops vector.  */
 
 static process_stratum_target lynx_target_ops = {
-  lynx_wait,
   lynx_fetch_registers,
   lynx_store_registers,
   NULL,  /* prepare_to_access_memory */
