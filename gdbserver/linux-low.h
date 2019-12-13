@@ -343,6 +343,11 @@ public:
 
   int read_offsets (CORE_ADDR *text, CORE_ADDR *data) override;
 #endif
+
+  bool supports_get_tls_address () override;
+
+  int get_tls_address (thread_info *thread, CORE_ADDR offset,
+		       CORE_ADDR load_module, CORE_ADDR *address) override;
 };
 
 #define get_thread_lwp(thr) ((struct lwp_info *) (thread_target_data (thr)))
