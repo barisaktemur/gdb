@@ -897,8 +897,8 @@ win32_process_target::thread_alive (ptid_t ptid)
 
 /* Resume the inferior process.  RESUME_INFO describes how we want
    to resume.  */
-static void
-win32_resume (struct thread_resume *resume_info, size_t n)
+void
+win32_process_target::resume (thread_resume *resume_info, size_t n)
 {
   DWORD tid;
   enum gdb_signal sig;
@@ -1828,7 +1828,6 @@ win32_sw_breakpoint_from_kind (int kind, int *size)
 static win32_process_target the_win32_target;
 
 static process_stratum_target win32_target_ops = {
-  win32_resume,
   win32_wait,
   win32_fetch_inferior_registers,
   win32_store_inferior_registers,
