@@ -6403,13 +6403,13 @@ linux_process_target::core_of_thread (ptid_t ptid)
   return linux_common_core_of_thread (ptid);
 }
 
-static int
-linux_supports_disable_randomization (void)
+bool
+linux_process_target::supports_disable_randomization ()
 {
 #ifdef HAVE_PERSONALITY
-  return 1;
+  return true;
 #else
-  return 0;
+  return false;
 #endif
 }
 
@@ -7445,7 +7445,6 @@ linux_get_hwcap2 (int wordsize)
 static linux_process_target the_linux_target;
 
 static process_stratum_target linux_target_ops = {
-  linux_supports_disable_randomization,
   linux_qxfer_libraries_svr4,
   linux_supports_agent,
 #ifdef HAVE_LINUX_BTRACE
