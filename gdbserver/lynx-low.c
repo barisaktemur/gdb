@@ -735,15 +735,10 @@ lynx_process_target::sw_breakpoint_from_kind (int kind, int *size)
   return nullptr;
 }
 
-/* The LynxOS target ops object.  */
-
-static lynx_process_target the_lynx_target;
-
 void
 initialize_low (void)
 {
-  the_target.reset (new process_stratum_target);
-  the_target->pt = &the_lynx_target;
+  the_target.reset (new lynx_process_target);
   the_low_target.arch_setup ();
 }
 

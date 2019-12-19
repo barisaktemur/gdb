@@ -378,7 +378,7 @@ do_initial_child_stuff (HANDLE proch, DWORD pid, int attached)
     {
       struct target_waitstatus status;
 
-      the_target->pt->wait (minus_one_ptid, &status, 0);
+      the_target->wait (minus_one_ptid, &status, 0);
 
       /* Note win32_wait doesn't return thread events.  */
       if (status.kind != TARGET_WAITKIND_LOADED)
@@ -1843,15 +1843,10 @@ win32_process_target::sw_breakpoint_from_kind (int kind, int *size)
   return the_low_target.breakpoint;
 }
 
-/* The win32 target ops object.  */
-
-static win32_process_target the_win32_target;
-
 /* Initialize the Win32 backend.  */
 void
 initialize_low (void)
 {
-  the_target.reset (new process_stratum_target);
-  the_target->pt = &the_win32_target;
+  the_target.reset (new win32_process_target);
   the_low_target.arch_setup ();
 }

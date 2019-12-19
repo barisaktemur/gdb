@@ -942,10 +942,6 @@ nto_process_target::sw_breakpoint_from_kind (int kind, int *size)
   return the_low_target.breakpoint;
 }
 
-/* The QNX Neutrino target ops object.  */
-
-static nto_process_target the_nto_target;
-
 /* Global function called by server.c.  Initializes QNX Neutrino
    gdbserver.  */
 
@@ -955,8 +951,7 @@ initialize_low (void)
   sigset_t set;
 
   TRACE ("%s\n", __func__);
-  the_target.reset (new process_stratum_target);
-  the_target->pt = &the_nto_target;
+  the_target.reset (new nto_process_target);
 
   /* We use SIGUSR1 to gain control after we block waiting for a process.
      We use sigwaitevent to wait.  */
