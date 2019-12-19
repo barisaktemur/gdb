@@ -478,6 +478,8 @@ public:
   bool thread_handle (ptid_t ptid, gdb_byte **handle,
 		      int *handle_len) override;
 #endif
+
+  bool supports_software_single_step () override;
 };
 
 #define get_thread_lwp(thr) ((struct lwp_info *) (thread_target_data (thr)))
