@@ -506,9 +506,7 @@ public:
   virtual int get_ipa_tdesc_idx ();
 };
 
-extern process_stratum_target *the_target;
-
-void set_target_ops (process_stratum_target *);
+extern std::unique_ptr<process_stratum_target> the_target;
 
 #define target_create_inferior(program, program_args)	\
   the_target->pt->create_inferior (program, program_args)

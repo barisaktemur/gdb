@@ -27,7 +27,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-process_stratum_target *the_target;
+std::unique_ptr<process_stratum_target> the_target;
 
 int
 set_desired_thread ()
@@ -118,7 +118,7 @@ done_accessing_memory (void)
 
   /* Restore the previous selected thread.  */
   cs.general_thread = prev_general_thread;
-  switch_to_thread (the_target, cs.general_thread);
+  switch_to_thread (the_target.get (), cs.general_thread);
 }
 
 int
@@ -265,13 +265,6 @@ int
 target_supports_multi_process (void)
 {
   return the_target->pt->supports_multi_process ();
-}
-
-void
-set_target_ops (process_stratum_target *target)
-{
-  the_target = XNEW (process_stratum_target);
-  memcpy (the_target, target, sizeof (*the_target));
 }
 
 /* Convert pid to printable format.  */

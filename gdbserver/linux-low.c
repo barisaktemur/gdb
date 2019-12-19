@@ -7512,10 +7512,6 @@ linux_get_hwcap2 (int wordsize)
 
 static linux_process_target the_linux_target;
 
-static process_stratum_target linux_target_ops = {
-  &the_linux_target,
-};
-
 #ifdef HAVE_LINUX_REGSETS
 void
 initialize_regsets_info (struct regsets_info *info)
@@ -7533,7 +7529,8 @@ initialize_low (void)
   struct sigaction sigchld_action;
 
   memset (&sigchld_action, 0, sizeof (sigchld_action));
-  set_target_ops (&linux_target_ops);
+  the_target.reset (new process_stratum_target);
+  the_target->pt = &the_linux_target;
 
   linux_ptrace_init_warnings ();
   linux_proc_init_warnings ();
