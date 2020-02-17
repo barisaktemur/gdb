@@ -6404,6 +6404,12 @@ linux_process_target::handle_monitor_command (char *mon)
 #endif
 }
 
+int
+linux_process_target::core_of_thread (ptid_t ptid)
+{
+  return linux_common_core_of_thread (ptid);
+}
+
 static int
 linux_supports_disable_randomization (void)
 {
@@ -7435,7 +7441,6 @@ linux_get_hwcap2 (int wordsize)
 static linux_process_target the_linux_target;
 
 static process_stratum_target linux_target_ops = {
-  linux_common_core_of_thread,
   linux_read_loadmap,
   linux_process_qsupported,
   linux_supports_tracepoints,
