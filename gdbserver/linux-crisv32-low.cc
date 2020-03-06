@@ -49,6 +49,12 @@ protected:
   void low_set_pc (regcache *regcache, CORE_ADDR newpc) override;
 
   bool low_breakpoint_at (CORE_ADDR pc) override;
+
+  int low_insert_point (raw_bkpt_type type, CORE_ADDR addr,
+			int size, raw_breakpoint *bp) override;
+
+  int low_remove_point (raw_bkpt_type type, CORE_ADDR addr,
+			int size, raw_breakpoint *bp) override;
 };
 
 /* The singleton target ops object.  */
@@ -195,9 +201,9 @@ crisv32_target::supports_z_point_type (char z_type)
     }
 }
 
-static int
-cris_insert_point (enum raw_bkpt_type type, CORE_ADDR addr,
-		   int len, struct raw_breakpoint *bp)
+int
+crisv32_target::low_insert_point (raw_bkpt_type type, CORE_ADDR addr,
+				  int len, raw_breakpoint *bp)
 {
   int bp;
   unsigned long bp_ctrl;
@@ -268,9 +274,9 @@ cris_insert_point (enum raw_bkpt_type type, CORE_ADDR addr,
   return 0;
 }
 
-static int
-cris_remove_point (enum raw_bkpt_type type, CORE_ADDR addr, int len,
-		   struct raw_breakpoint *bp)
+int
+crisv32_target::low_remove_point (raw_bkpt_type type, CORE_ADDR addr,
+				  int len, raw_breakpoint *bp)
 {
   int bp;
   unsigned long bp_ctrl;
@@ -460,8 +466,6 @@ crisv32_target::get_regs_info ()
 }
 
 struct linux_target_ops the_low_target = {
-  cris_insert_point,
-  cris_remove_point,
   cris_stopped_by_watchpoint,
   cris_stopped_data_address,
   NULL, /* collect_ptrace_register */

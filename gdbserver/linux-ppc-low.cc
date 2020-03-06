@@ -73,6 +73,12 @@ protected:
   void low_set_pc (regcache *regcache, CORE_ADDR newpc) override;
 
   bool low_breakpoint_at (CORE_ADDR pc) override;
+
+  int low_insert_point (raw_bkpt_type type, CORE_ADDR addr,
+			int size, raw_breakpoint *bp) override;
+
+  int low_remove_point (raw_bkpt_type type, CORE_ADDR addr,
+			int size, raw_breakpoint *bp) override;
 };
 
 /* The singleton target ops object.  */
@@ -348,12 +354,12 @@ ppc_target::supports_z_point_type (char z_type)
     }
 }
 
-/* Implement insert_point target-ops.
+/* Implement the low_insert_point linux target op.
    Returns 0 on success, -1 on failure and 1 on unsupported.  */
 
-static int
-ppc_insert_point (enum raw_bkpt_type type, CORE_ADDR addr,
-		  int size, struct raw_breakpoint *bp)
+int
+ppc_target::low_insert_point (raw_bkpt_type type, CORE_ADDR addr,
+			      int size, raw_breakpoint *bp)
 {
   switch (type)
     {
@@ -369,12 +375,12 @@ ppc_insert_point (enum raw_bkpt_type type, CORE_ADDR addr,
     }
 }
 
-/* Implement remove_point target-ops.
+/* Implement the low_remove_point linux target op.
    Returns 0 on success, -1 on failure and 1 on unsupported.  */
 
-static int
-ppc_remove_point (enum raw_bkpt_type type, CORE_ADDR addr,
-		  int size, struct raw_breakpoint *bp)
+int
+ppc_target::low_remove_point (raw_bkpt_type type, CORE_ADDR addr,
+			      int size, raw_breakpoint *bp)
 {
   switch (type)
     {
@@ -3412,8 +3418,6 @@ ppc_get_ipa_tdesc_idx (void)
 }
 
 struct linux_target_ops the_low_target = {
-  ppc_insert_point,
-  ppc_remove_point,
   NULL,
   NULL,
   ppc_collect_ptrace_register,
