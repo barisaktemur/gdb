@@ -91,6 +91,8 @@ protected:
   void low_set_pc (regcache *regcache, CORE_ADDR newpc) override;
 
   bool low_breakpoint_at (CORE_ADDR pc) override;
+
+  int low_get_thread_area (int lwpid, CORE_ADDR *addrp) override;
 };
 
 /* The singleton target ops object.  */
@@ -774,10 +776,10 @@ s390_target::supports_tracepoints ()
   return true;
 }
 
-/* Implementation of linux_target_ops method "get_thread_area".  */
+/* Implementation of linux target ops method "low_get_thread_area".  */
 
-static int
-s390_get_thread_area (int lwpid, CORE_ADDR *addrp)
+int
+s390_target::low_get_thread_area (int lwpid, CORE_ADDR *addrp)
 {
   CORE_ADDR res = ptrace (PTRACE_PEEKUSER, lwpid, (long) PT_ACR0, (long) 0);
 #ifdef __s390x__
@@ -2841,7 +2843,6 @@ s390_emit_ops (void)
 }
 
 struct linux_target_ops the_low_target = {
-  s390_get_thread_area,
   s390_install_fast_tracepoint_jump_pad,
   s390_emit_ops,
   s390_get_min_fast_tracepoint_insn_len,
