@@ -32,6 +32,8 @@ public:
 
   const gdb_byte *sw_breakpoint_from_kind (int kind, int *size) override;
 
+  bool supports_z_point_type (char z_type) override;
+
 protected:
 
   void low_arch_setup () override;
@@ -179,17 +181,17 @@ cris_write_data_breakpoint (struct regcache *regcache,
     }
 }
 
-static int
-cris_supports_z_point_type (char z_type)
+bool
+crisv32_target::supports_z_point_type (char z_type)
 {
   switch (z_type)
     {
     case Z_PACKET_WRITE_WP:
     case Z_PACKET_READ_WP:
     case Z_PACKET_ACCESS_WP:
-      return 1;
+      return true;
     default:
-      return 0;
+      return false;
     }
 }
 
@@ -458,7 +460,6 @@ crisv32_target::get_regs_info ()
 }
 
 struct linux_target_ops the_low_target = {
-  cris_supports_z_point_type,
   cris_insert_point,
   cris_remove_point,
   cris_stopped_by_watchpoint,
