@@ -126,6 +126,8 @@ public:
 
   struct emit_ops *emit_ops () override;
 
+  int get_ipa_tdesc_idx () override;
+
 protected:
 
   void low_arch_setup () override;
@@ -2967,8 +2969,8 @@ x86_target::low_supports_range_stepping ()
   return true;
 }
 
-static int
-x86_get_ipa_tdesc_idx (void)
+int
+x86_target::get_ipa_tdesc_idx ()
 {
   struct regcache *regcache = get_thread_regcache (current_thread, 0);
   const struct target_desc *tdesc = regcache->tdesc;
@@ -2988,7 +2990,6 @@ x86_get_ipa_tdesc_idx (void)
 
 struct linux_target_ops the_low_target =
 {
-  x86_get_ipa_tdesc_idx,
 };
 
 /* The linux target ops object.  */
