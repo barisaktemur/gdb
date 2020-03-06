@@ -2957,15 +2957,6 @@ x86_target::low_supports_range_stepping ()
   return true;
 }
 
-/* Implementation of linux_target_ops method "supports_hardware_single_step".
- */
-
-static int
-x86_supports_hardware_single_step (void)
-{
-  return 1;
-}
-
 static int
 x86_get_ipa_tdesc_idx (void)
 {
@@ -2987,7 +2978,6 @@ x86_get_ipa_tdesc_idx (void)
 
 struct linux_target_ops the_low_target =
 {
-  x86_supports_hardware_single_step,
   x86_get_syscall_trapinfo,
   x86_get_ipa_tdesc_idx,
 };
