@@ -131,9 +131,6 @@ struct lwp_info;
 
 struct linux_target_ops
 {
-  /* Hook to call prior to resuming a thread.  */
-  void (*prepare_to_resume) (struct lwp_info *);
-
   /* Hook to support target specific qSupported.  */
   void (*process_qsupported) (char **, int count);
 
@@ -721,6 +718,9 @@ protected:
 
   /* Hook to call, if any, when a new fork is attached.  */
   virtual void low_new_fork (process_info *parent, process_info *child);
+
+  /* Hook to call prior to resuming a thread.  */
+  virtual void low_prepare_to_resume (lwp_info *lwp);
 
   /* How many bytes the PC should be decremented after a break.  */
   int m_decr_pc_after_break;

@@ -111,6 +111,8 @@ protected:
   void low_delete_thread (arch_lwp_info *) override;
 
   void low_new_fork (process_info *parent, process_info *child) override;
+
+  void low_prepare_to_resume (lwp_info *lwp) override;
 };
 
 /* The singleton target ops object.  */
@@ -815,8 +817,8 @@ arm_target::low_new_fork (process_info *parent, process_info *child)
 
 /* Called when resuming a thread.
    If the debug regs have changed, update the thread's copies.  */
-static void
-arm_prepare_to_resume (struct lwp_info *lwp)
+void
+arm_target::low_prepare_to_resume (lwp_info *lwp)
 {
   struct thread_info *thread = get_lwp_thread (lwp);
   int pid = lwpid_of (thread);
@@ -1117,7 +1119,6 @@ arm_target::get_regs_info ()
 }
 
 struct linux_target_ops the_low_target = {
-  arm_prepare_to_resume,
   NULL, /* process_qsupported */
   NULL, /* supports_tracepoints */
   NULL, /* get_thread_area */
