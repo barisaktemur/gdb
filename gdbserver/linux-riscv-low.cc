@@ -36,6 +36,8 @@ class riscv_target : public linux_process_target
 {
 public:
 
+  riscv_target () : linux_process_target (0) { }
+
   const regs_info *get_regs_info () override;
 
   int breakpoint_kind_from_pc (CORE_ADDR *pcptr) override;
@@ -309,7 +311,6 @@ riscv_breakpoint_at (CORE_ADDR pc)
 /* RISC-V/Linux target operations.  */
 struct linux_target_ops the_low_target =
 {
-  0,    /* decr_pc_after_break */
   riscv_breakpoint_at,
 };
 

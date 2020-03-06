@@ -51,11 +51,16 @@
 
 #define s390_num_regs 52
 
+static const gdb_byte s390_breakpoint[] = { 0, 1 };
+#define s390_breakpoint_len 2
+
 /* Linux target op definitions for the S/390 architecture.  */
 
 class s390_target : public linux_process_target
 {
 public:
+
+  s390_target () : linux_process_target (s390_breakpoint_len) { }
 
   const regs_info *get_regs_info () override;
 
@@ -449,9 +454,6 @@ static struct regset_info s390_regsets[] = {
   NULL_REGSET
 };
 
-
-static const gdb_byte s390_breakpoint[] = { 0, 1 };
-#define s390_breakpoint_len 2
 
 /* Implementation of target ops method "sw_breakpoint_from_kind".  */
 
@@ -2826,7 +2828,6 @@ s390_emit_ops (void)
 }
 
 struct linux_target_ops the_low_target = {
-  s390_breakpoint_len,
   s390_breakpoint_at,
   s390_supports_z_point_type,
   NULL,

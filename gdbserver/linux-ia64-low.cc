@@ -29,6 +29,8 @@ class ia64_target : public linux_process_target
 {
 public:
 
+  ia64_target () : linux_process_target (0) { }
+
   const regs_info *get_regs_info () override;
 
   const gdb_byte *sw_breakpoint_from_kind (int kind, int *size) override;

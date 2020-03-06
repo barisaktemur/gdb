@@ -131,7 +131,6 @@ struct lwp_info;
 
 struct linux_target_ops
 {
-  int decr_pc_after_break;
   int (*breakpoint_at) (CORE_ADDR pc);
 
   /* Breakpoint and watchpoint related functions.  See target.h for
@@ -236,6 +235,8 @@ extern struct linux_target_ops the_low_target;
 class linux_process_target : public process_stratum_target
 {
 public:
+
+  linux_process_target (int decr_pc_after_break);
 
   int create_inferior (const char *program,
 		       const std::vector<char *> &program_args) override;
@@ -666,6 +667,9 @@ protected:
      Targets that override this method should also override
      'supports_software_single_step' to return true.  */
   virtual std::vector<CORE_ADDR> low_get_next_pcs (regcache *regcache);
+
+  /* How many bytes the PC should be decremented after a break.  */
+  int m_decr_pc_after_break;
 };
 
 extern linux_process_target *the_linux_target;

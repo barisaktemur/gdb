@@ -100,6 +100,8 @@ class x86_target : public linux_process_target
 {
 public:
 
+  x86_target () : linux_process_target (1) { }
+
   /* Update all the target description of all processes; a new GDB
      connected, and it may or not support xml target descriptions.  */
   void update_xmltarget ();
@@ -2899,7 +2901,6 @@ x86_get_ipa_tdesc_idx (void)
 
 struct linux_target_ops the_low_target =
 {
-  1,
   x86_breakpoint_at,
   x86_supports_z_point_type,
   x86_insert_point,

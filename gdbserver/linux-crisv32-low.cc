@@ -26,6 +26,8 @@ class crisv32_target : public linux_process_target
 {
 public:
 
+  crisv32_target () : linux_process_target (0) { }
+
   const regs_info *get_regs_info () override;
 
   const gdb_byte *sw_breakpoint_from_kind (int kind, int *size) override;
@@ -455,7 +457,6 @@ crisv32_target::get_regs_info ()
 }
 
 struct linux_target_ops the_low_target = {
-  0,
   cris_breakpoint_at,
   cris_supports_z_point_type,
   cris_insert_point,

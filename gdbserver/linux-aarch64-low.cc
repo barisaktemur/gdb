@@ -54,6 +54,7 @@
 class aarch64_target : public linux_process_target
 {
 public:
+  aarch64_target () : linux_process_target (0) { }
 
   const regs_info *get_regs_info () override;
 
@@ -3103,7 +3104,6 @@ aarch64_supports_hardware_single_step (void)
 
 struct linux_target_ops the_low_target =
 {
-  0,    /* decr_pc_after_break */
   aarch64_breakpoint_at,
   aarch64_supports_z_point_type,
   aarch64_insert_point,

@@ -29,6 +29,8 @@ class m32r_target : public linux_process_target
 {
 public:
 
+  m32r_target () : linux_process_target (0) { }
+
   const regs_info *get_regs_info () override;
 
   const gdb_byte *sw_breakpoint_from_kind (int kind, int *size) override;
@@ -160,7 +162,6 @@ m32r_target::get_regs_info ()
 }
 
 struct linux_target_ops the_low_target = {
-  0,
   m32r_breakpoint_at,
   NULL, /* supports_z_point_type */
   NULL, /* insert_point */

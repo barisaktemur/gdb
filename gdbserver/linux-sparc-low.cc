@@ -48,6 +48,8 @@ class sparc_target : public linux_process_target
 {
 public:
 
+  sparc_target () : linux_process_target (0) { }
+
   const regs_info *get_regs_info () override;
 
   const gdb_byte *sw_breakpoint_from_kind (int kind, int *size) override;
@@ -339,7 +341,6 @@ sparc_target::get_regs_info ()
 }
 
 struct linux_target_ops the_low_target = {
-  0,
   sparc_breakpoint_at,
   NULL,  /* supports_z_point_type */
   NULL, NULL, NULL, NULL,

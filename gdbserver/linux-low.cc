@@ -281,6 +281,12 @@ static int check_ptrace_stopped_lwp_gone (struct lwp_info *lp);
    being stepped.  */
 ptid_t step_over_bkpt;
 
+linux_process_target::linux_process_target (int decr_pc_after_break)
+  : m_decr_pc_after_break {decr_pc_after_break}
+{
+  /* Nop.  */
+}
+
 /* True if the low target can hardware single-step.  */
 
 static int
@@ -796,7 +802,7 @@ linux_process_target::save_stop_reason (lwp_info *lwp)
     return false;
 
   pc = get_pc (lwp);
-  sw_breakpoint_pc = pc - the_low_target.decr_pc_after_break;
+  sw_breakpoint_pc = pc - this->m_decr_pc_after_break;
 
   /* breakpoint_at reads from the current thread.  */
   saved_thread = current_thread;
@@ -3694,7 +3700,7 @@ linux_process_target::wait_1 (ptid_t ptid, target_waitstatus *ourstatus,
   if (event_child->stop_reason == TARGET_STOPPED_BY_SW_BREAKPOINT
       && !cs.swbreak_feature)
     {
-      int decr_pc = the_low_target.decr_pc_after_break;
+      int decr_pc = this->m_decr_pc_after_break;
 
       if (decr_pc != 0)
 	{
