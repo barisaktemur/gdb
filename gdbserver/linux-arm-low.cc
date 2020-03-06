@@ -115,6 +115,10 @@ protected:
   void low_new_fork (process_info *parent, process_info *child) override;
 
   void low_prepare_to_resume (lwp_info *lwp) override;
+
+  bool low_supports_catch_syscall () override;
+
+  void low_get_syscall_trapinfo (regcache *regcache, int *sysno) override;
 };
 
 /* The singleton target ops object.  */
@@ -1040,10 +1044,16 @@ arm_target::supports_hardware_single_step ()
   return false;
 }
 
-/* Implementation of linux_target_ops method "get_syscall_trapinfo".  */
+bool
+arm_target::low_supports_catch_syscall ()
+{
+  return true;
+}
 
-static void
-arm_get_syscall_trapinfo (struct regcache *regcache, int *sysno)
+/* Implementation of linux target ops method "low_get_syscall_trapinfo".  */
+
+void
+arm_target::low_get_syscall_trapinfo (regcache *regcache, int *sysno)
 {
   if (arm_is_thumb_mode ())
     collect_register_by_name (regcache, "r7", sysno);
@@ -1054,7 +1064,7 @@ arm_get_syscall_trapinfo (struct regcache *regcache, int *sysno)
 
       collect_register_by_name (regcache, "pc", &pc);
 
-      if (the_target->read_memory (pc - 4, (unsigned char *) &insn, 4))
+      if (read_memory (pc - 4, (unsigned char *) &insn, 4))
 	*sysno = UNKNOWN_SYSCALL;
       else
 	{
@@ -1121,7 +1131,6 @@ arm_target::get_regs_info ()
 }
 
 struct linux_target_ops the_low_target = {
-  arm_get_syscall_trapinfo,
 };
 
 /* The linux target ops object.  */
