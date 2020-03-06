@@ -44,6 +44,8 @@ protected:
   CORE_ADDR low_get_pc (regcache *regcache) override;
 
   void low_set_pc (regcache *regcache, CORE_ADDR newpc) override;
+
+  bool low_breakpoint_at (CORE_ADDR pc) override;
 };
 
 /* The singleton target ops object.  */
@@ -183,16 +185,16 @@ m68k_target::sw_breakpoint_from_kind (int kind, int *size)
   return m68k_breakpoint;
 }
 
-static int
-m68k_breakpoint_at (CORE_ADDR pc)
+bool
+m68k_target::low_breakpoint_at (CORE_ADDR pc)
 {
   unsigned char c[2];
 
   read_inferior_memory (pc, c, 2);
   if (c[0] == 0x4E && c[1] == 0x4F)
-    return 1;
+    return true;
 
-  return 0;
+  return false;
 }
 
 #include <asm/ptrace.h>
@@ -257,7 +259,6 @@ m68k_supports_hardware_single_step (void)
 }
 
 struct linux_target_ops the_low_target = {
-  m68k_breakpoint_at,
   NULL, /* supports_z_point_type */
   NULL, /* insert_point */
   NULL, /* remove_point */
