@@ -3114,8 +3114,6 @@ aarch64_supports_hardware_single_step (void)
 
 struct linux_target_ops the_low_target =
 {
-  NULL, /* collect_ptrace_register */
-  NULL, /* supply_ptrace_register */
   aarch64_linux_siginfo_fixup,
   aarch64_linux_new_process,
   aarch64_linux_delete_process,
