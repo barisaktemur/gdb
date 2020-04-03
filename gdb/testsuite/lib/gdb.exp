@@ -570,7 +570,7 @@ proc runto { function args } {
 	    }
 	    return 1
 	}
-	-re "Breakpoint \[0-9\]*, \[0-9xa-f\]* in .*$gdb_prompt $" { 
+	-re "\[Bb\]reakpoint \[0-9\]*, \[0-9xa-f\]* in .*$gdb_prompt $" {
 	    if { $print_pass } {
 		pass $test_name
 	    }
