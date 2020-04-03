@@ -1,0 +1,88 @@
+# Copyright (C) 2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# This test-case tests that continuing an inferior that has been killed
+# using an external sigkill does not make gdb hang.
+
+standard_testfile
+
+if {[prepare_for_testing "failed to prepare" $testfile $srcfile \
+	 {pthreads}] == -1} {
+    return -1
+}
+
+set res [runto main no-message temporary]
+if { $res != 1 } {
+    return -1
+}
+
+set pid -1
+gdb_test_multiple "info inferior 1" "get inferior pid" {
+    -re -wrap "process (\[0-9\]*).*" {
+       set pid $expect_out(1,string)
+       pass $gdb_test_name
+    }
+}
+if { $pid == -1 } {
+    return -1
+}
+
+gdb_test_multiple "continue" "" {
+    -re "Continuing" {
+	pass $gdb_test_name
+    }
+}
+
+send_gdb "\003"
+
+gdb_test_multiple "" "get sigint" {
+    -re -wrap "received signal SIGINT, Interrupt\..*" {
+       pass $gdb_test_name
+   }
+}
+
+gdb_test_no_output "shell kill -s SIGKILL $pid" "shell kill -s SIGKILL pid"
+
+set no_such_process_msg "Couldn't get registers: No such process\."
+set killed_msg "Program terminated with signal SIGKILL, Killed\."
+set no_longer_exists_msg "The program no longer exists\."
+set not_being_run_msg "The program is not being run\."
+
+gdb_test_multiple "continue" "prompt after first continue" {
+    -re "Continuing\.\r\n\r\n$killed_msg\r\n$no_longer_exists_msg\r\n$gdb_prompt $" {
+	pass $gdb_test_name
+	# Regular output, bug condition was not triggered, we're done.
+	return -1
+    }
+    -re "Continuing\.\r\n$no_such_process_msg\r\n$no_such_process_msg\r\n$gdb_prompt " {
+	pass $gdb_test_name
+	# Two times $no_such_process_msg.  The bug condition was triggered, go
+	# check for it.
+    }
+    -re "Continuing\.\r\n$no_such_process_msg\r\n$gdb_prompt $" {
+	pass $gdb_test_name
+	# One time $no_such_process_msg.  We're stuck here.  The bug condition
+	# was not triggered, but we're not getting correct gdb behaviour either:
+	# every subsequent continue produces one no_such_process_msg.  Give up.
+	return -1
+    }
+}
+
+gdb_test_multiple "" "messages" {
+    -re ".*$killed_msg.*$no_longer_exists_msg\r\n" {
+	pass $gdb_test_name
+	gdb_test "continue" $not_being_run_msg "second continue"
+    }
+}
