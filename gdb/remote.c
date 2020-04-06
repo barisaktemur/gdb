@@ -3822,6 +3822,18 @@ remote_target::update_thread_list ()
 	  if (tp->inf->process_target () != this)
 	    continue;
 
+	  /* Do not delete the thread if it belongs to another inferior
+	     that has only one non-exited thread, because otherwise we
+	     would end up with a seemingly live inferior with no threads.  */
+	  if (tp->inf != current_inferior ())
+	    {
+	      int num_threads = 0;
+	      for (thread_info *t ATTRIBUTE_UNUSED : tp->inf->non_exited_threads ())
+		num_threads++;
+	      if (num_threads == 1)
+		continue;
+	    }
+
 	  if (!context.contains_thread (tp->ptid))
 	    {
 	      /* Not found.  */
