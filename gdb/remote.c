@@ -3821,6 +3821,9 @@ remote_target::update_thread_list ()
 	  if (tp->inf->process_target () != this)
 	    continue;
 
+	  if (tp->suspend.waitstatus_pending_p)
+	    continue;
+
 	  if (!context.contains_thread (tp->ptid))
 	    {
 	      /* Not found.  */
