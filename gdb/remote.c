@@ -3822,6 +3822,14 @@ remote_target::update_thread_list ()
 	  if (tp->inf->process_target () != this)
 	    continue;
 
+	  /* Do not remove the thread if it has a pending exit event.
+	     Otherwise we may end up with a seemingly live inferior
+	     (i.e.  pid != 0) that has no threads.  */
+	  if (tp->suspend.waitstatus_pending_p
+	      && (tp->suspend.waitstatus.kind == TARGET_WAITKIND_SIGNALLED
+		  || tp->suspend.waitstatus.kind == TARGET_WAITKIND_EXITED))
+	    continue;
+
 	  if (!context.contains_thread (tp->ptid))
 	    {
 	      /* Not found.  */
