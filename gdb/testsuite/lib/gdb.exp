@@ -1849,6 +1849,17 @@ proc default_gdb_spawn { } {
     return 0
 }
 
+# Overridable procedure that is called at the end of
+# default_gdb_start.
+
+proc default_gdb_start_post_cmd { } {
+    # Do nothing by default.
+    # You can override this in your board file or your test.
+    #
+    # E.g. Do "maint set target-non-stop on" to start in
+    # all-stop-on-top-of-non-stop mode.
+}
+
 # Default gdb_start procedure.
 
 proc default_gdb_start { } {
@@ -1919,6 +1930,7 @@ proc default_gdb_start { } {
     }
 
     gdb_debug_init
+    default_gdb_start_post_cmd
     return 0
 }
 
