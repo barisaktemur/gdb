@@ -20,6 +20,7 @@
 #include "defs.h"
 #include "process-stratum-target.h"
 #include "inferior.h"
+#include <set>
 
 process_stratum_target::~process_stratum_target ()
 {
@@ -82,4 +83,28 @@ process_stratum_target::has_execution (inferior *inf)
   /* If there's a process running already, we can't make it run
      through hoops.  */
   return inf->pid != 0;
+}
+
+/* See process-stratum-target.h.  */
+
+std::set<process_stratum_target *>
+all_non_exited_process_targets ()
+{
+  std::set<process_stratum_target *> targets;
+  for (inferior *inf : all_non_exited_inferiors ())
+    targets.insert (inf->process_target ());
+
+  return targets;
+}
+
+/* See process-stratum-target.h.  */
+
+void
+switch_to_target_no_thread (process_stratum_target *target)
+{
+  for (inferior *inf : all_inferiors (target))
+    {
+      switch_to_inferior_no_thread (inf);
+      break;
+    }
 }

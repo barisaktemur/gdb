@@ -82,4 +82,13 @@ as_process_stratum_target (target_ops *target)
   return static_cast<process_stratum_target *> (target);
 }
 
+/* Return a collection of targets that have non-exited inferiors.  */
+
+extern std::set<process_stratum_target *> all_non_exited_process_targets ();
+
+/* Switch to the first inferior (and program space) of TARGET, and
+   switch to no thread selected.  */
+
+extern void switch_to_target_no_thread (process_stratum_target *target);
+
 #endif /* !defined (PROCESS_STRATUM_TARGET_H) */
