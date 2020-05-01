@@ -4763,8 +4763,12 @@ stop_all_threads (void)
 
   scoped_restore_current_thread restore_thread;
 
-  target_thread_events (1);
-  SCOPE_EXIT { target_thread_events (0); };
+  /* Enable thread events of all targets.  */
+  for (auto *target : all_non_exited_process_targets ())
+    {
+      switch_to_target_no_thread (target);
+      target_thread_events (true);
+    }
 
   /* Request threads to stop, and then wait for the stops.  Because
      threads we already know about can spawn more threads while we're
@@ -4954,6 +4958,13 @@ stop_all_threads (void)
 		}
 	    }
 	}
+    }
+
+  /* Disable thread events of all targets.  */
+  for (auto *target : all_non_exited_process_targets ())
+    {
+      switch_to_target_no_thread (target);
+      target_thread_events (false);
     }
 
   if (debug_infrun)
