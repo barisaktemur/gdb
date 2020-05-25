@@ -966,58 +966,53 @@ jit_breakpoint_re_set_internal (struct gdbarch *gdbarch,
   struct jit_objfile_data *objf_data;
   CORE_ADDR addr;
 
-  objfile *the_objfile = nullptr;
-  if (!ps_data->objfile_and_bps.empty ())
-    the_objfile = ps_data->objfile_and_bps.begin ()->first;
-
-  if (the_objfile == nullptr)
+  for (objfile *the_objfile : current_program_space->objfiles ())
     {
       /* Lookup the registration symbol.  If it is missing, then we
 	 assume we are not attached to a JIT.  */
-      reg_symbol = lookup_bound_minimal_symbol (jit_break_name);
+      reg_symbol = lookup_minimal_symbol (jit_break_name, nullptr,
+					  the_objfile);
       if (reg_symbol.minsym == NULL
 	  || BMSYMBOL_VALUE_ADDRESS (reg_symbol) == 0)
-	return 1;
+	continue;
 
       desc_symbol = lookup_minimal_symbol (jit_descriptor_name, NULL,
 					   reg_symbol.objfile);
       if (desc_symbol.minsym == NULL
 	  || BMSYMBOL_VALUE_ADDRESS (desc_symbol) == 0)
-	return 1;
+	continue;
 
       objf_data = get_jit_objfile_data (reg_symbol.objfile);
       objf_data->register_code = reg_symbol.minsym;
       objf_data->descriptor = desc_symbol.minsym;
 
       the_objfile = reg_symbol.objfile;
+
+      addr = MSYMBOL_VALUE_ADDRESS (the_objfile, objf_data->register_code);
+
+      if (jit_debug)
+	fprintf_unfiltered (gdb_stdlog,
+			    "jit_breakpoint_re_set_internal, "
+			    "breakpoint_addr = %s\n",
+			    paddress (gdbarch, addr));
+
+      /* Note that this will insert a fresh value if THE_OBJFILE does not
+	 exist as a key.  */
+      jit_objfile_bp &info = ps_data->objfile_and_bps[the_objfile];
+
+      if (info.cached_code_address == addr)
+	continue;
+
+      /* Delete the old breakpoint.  */
+      if (info.jit_breakpoint != nullptr)
+	delete_breakpoint (info.jit_breakpoint);
+
+      /* Put a breakpoint in the registration symbol.  */
+      info.cached_code_address = addr;
+      info.jit_breakpoint = create_jit_event_breakpoint (gdbarch, addr);
     }
-  else
-    objf_data = get_jit_objfile_data (the_objfile);
 
-  addr = MSYMBOL_VALUE_ADDRESS (the_objfile, objf_data->register_code);
-
-  if (jit_debug)
-    fprintf_unfiltered (gdb_stdlog,
-			"jit_breakpoint_re_set_internal, "
-			"breakpoint_addr = %s\n",
-			paddress (gdbarch, addr));
-
-  /* Note that this will insert a fresh value if THE_OBJFILE does not
-     exist as a key.  */
-  jit_objfile_bp &info = ps_data->objfile_and_bps[the_objfile];
-
-  if (info.cached_code_address == addr)
-    return 0;
-
-  /* Delete the old breakpoint.  */
-  if (info.jit_breakpoint != nullptr)
-    delete_breakpoint (info.jit_breakpoint);
-
-  /* Put a breakpoint in the registration symbol.  */
-  info.cached_code_address = addr;
-  info.jit_breakpoint = create_jit_event_breakpoint (gdbarch, addr);
-
-  return 0;
+  return (ps_data->objfile_and_bps.empty ()) ? 1 : 0;
 }
 
 /* The private data passed around in the frame unwind callback
@@ -1268,40 +1263,40 @@ jit_inferior_init (struct gdbarch *gdbarch)
   if (jit_breakpoint_re_set_internal (gdbarch, ps_data) != 0)
     return;
 
-  /* Fetch the saved objfile.  */
-  objfile *objf = nullptr;
-  if (!ps_data->objfile_and_bps.empty ())
-    objf = (ps_data->objfile_and_bps.begin ())->first;
-
-  /* Read the descriptor so we can check the version number and load
-     any already JITed functions.  */
-  if (!jit_read_descriptor (gdbarch, &descriptor, objf))
-    return;
-
-  /* Check that the version number agrees with that we support.  */
-  if (descriptor.version != 1)
+  for (auto &objf_and_bp : ps_data->objfile_and_bps)
     {
-      printf_unfiltered (_("Unsupported JIT protocol version %ld "
-			   "in descriptor (expected 1)\n"),
-			 (long) descriptor.version);
-      return;
-    }
+      objfile *objf = objf_and_bp.first;
 
-  /* If we've attached to a running program, we need to check the
-     descriptor to register any functions that were already
-     generated.  */
-  for (cur_entry_addr = descriptor.first_entry;
-       cur_entry_addr != 0;
-       cur_entry_addr = cur_entry.next_entry)
-    {
-      jit_read_code_entry (gdbarch, cur_entry_addr, &cur_entry);
-
-      /* This hook may be called many times during setup, so make sure
-	 we don't add the same symbol file twice.  */
-      if (jit_find_objf_with_entry_addr (cur_entry_addr) != NULL)
+      /* Read the descriptor so we can check the version number and load
+	 any already JITed functions.  */
+      if (!jit_read_descriptor (gdbarch, &descriptor, objf))
 	continue;
 
-      jit_register_code (gdbarch, cur_entry_addr, &cur_entry);
+      /* Check that the version number agrees with that we support.  */
+      if (descriptor.version != 1)
+	{
+	  printf_unfiltered (_("Unsupported JIT protocol version %ld "
+			       "in descriptor (expected 1)\n"),
+			     (long) descriptor.version);
+	  continue;
+	}
+
+      /* If we've attached to a running program, we need to check the
+	 descriptor to register any functions that were already
+	 generated.  */
+      for (cur_entry_addr = descriptor.first_entry;
+	   cur_entry_addr != 0;
+	   cur_entry_addr = cur_entry.next_entry)
+	{
+	  jit_read_code_entry (gdbarch, cur_entry_addr, &cur_entry);
+
+	  /* This hook may be called many times during setup, so make sure
+	     we don't add the same symbol file twice.  */
+	  if (jit_find_objf_with_entry_addr (cur_entry_addr) != NULL)
+	    continue;
+
+	  jit_register_code (gdbarch, cur_entry_addr, &cur_entry);
+	}
     }
 }
 
@@ -1357,38 +1352,38 @@ jit_event_handler (struct gdbarch *gdbarch)
 
   jit_program_space_data *ps_data = get_jit_program_space_data ();
 
-  /* Fetch the saved objfile.  */
-  objfile *objf = nullptr;
-  if (!ps_data->objfile_and_bps.empty ())
-    objf = (ps_data->objfile_and_bps.begin ())->first;
-
-  /* Read the descriptor from remote memory.  */
-  if (!jit_read_descriptor (gdbarch, &descriptor, objf))
-    return;
-  entry_addr = descriptor.relevant_entry;
-
-  /* Do the corresponding action.  */
-  switch (descriptor.action_flag)
+  for (auto &objf_and_bp : ps_data->objfile_and_bps)
     {
-    case JIT_NOACTION:
-      break;
-    case JIT_REGISTER:
-      jit_read_code_entry (gdbarch, entry_addr, &code_entry);
-      jit_register_code (gdbarch, entry_addr, &code_entry);
-      break;
-    case JIT_UNREGISTER:
-      objf = jit_find_objf_with_entry_addr (entry_addr);
-      if (objf == NULL)
-	printf_unfiltered (_("Unable to find JITed code "
-			     "entry at address: %s\n"),
-			   paddress (gdbarch, entry_addr));
-      else
-	objf->unlink ();
+      objfile *objf = objf_and_bp.first;
 
-      break;
-    default:
-      error (_("Unknown action_flag value in JIT descriptor!"));
-      break;
+      /* Read the descriptor from remote memory.  */
+      if (!jit_read_descriptor (gdbarch, &descriptor, objf))
+	continue;
+      entry_addr = descriptor.relevant_entry;
+
+      /* Do the corresponding action.  */
+      switch (descriptor.action_flag)
+	{
+	case JIT_NOACTION:
+	  break;
+	case JIT_REGISTER:
+	  jit_read_code_entry (gdbarch, entry_addr, &code_entry);
+	  jit_register_code (gdbarch, entry_addr, &code_entry);
+	  break;
+	case JIT_UNREGISTER:
+	  objf = jit_find_objf_with_entry_addr (entry_addr);
+	  if (objf == NULL)
+	    printf_unfiltered (_("Unable to find JITed code "
+				 "entry at address: %s\n"),
+			       paddress (gdbarch, entry_addr));
+	  else
+	    objf->unlink ();
+
+	  break;
+	default:
+	  error (_("Unknown action_flag value in JIT descriptor!"));
+	  break;
+	}
     }
 }
 
