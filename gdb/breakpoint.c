@@ -830,6 +830,48 @@ get_first_locp_gte_addr (CORE_ADDR address)
   return locp_found;
 }
 
+/* Parse COND_STRING in the context of LOC and set as the condition
+   expression of LOC.  BP_NUM is the number of LOC's owner, LOC_NUM is
+   the number of LOC within its owner.  In case of parsing error, mark
+   LOC as DISABLED_BY_COND.  In case of success, unset DISABLED_BY_COND.  */
+
+static void
+set_breakpoint_location_condition (const char *cond_string, bp_location *loc,
+				   int bp_num, int loc_num)
+{
+  bool has_junk = false;
+  try
+    {
+      expression_up new_exp = parse_exp_1 (&cond_string, loc->address,
+					   block_for_pc (loc->address), 0);
+      if (*cond_string != 0)
+	has_junk = true;
+      else
+	{
+	  loc->cond = std::move (new_exp);
+	  if (loc->disabled_by_cond && loc->enabled)
+	    printf_filtered (_("Breakpoint %d.%d is now enabled.\n"),
+			     bp_num, loc_num);
+
+	  loc->disabled_by_cond = false;
+	}
+    }
+  catch (const gdb_exception_error &e)
+    {
+      if (bp_num != 0)
+	warning (_("disabling breakpoint %d.%d: %s"),
+		 bp_num, loc_num, e.what ());
+      else
+	warning (_("disabling breakpoint location %d: %s"),
+		 loc_num, e.what ());
+
+      loc->disabled_by_cond = true;
+    }
+
+  if (has_junk)
+    error (_("Garbage '%s' follows condition"), cond_string);
+}
+
 void
 set_breakpoint_condition (struct breakpoint *b, const char *exp,
 			  int from_tty)
@@ -843,9 +885,15 @@ set_breakpoint_condition (struct breakpoint *b, const char *exp,
 	static_cast<watchpoint *> (b)->cond_exp.reset ();
       else
 	{
+	  int loc_num = 1;
 	  for (bp_location *loc = b->loc; loc != nullptr; loc = loc->next)
 	    {
 	      loc->cond.reset ();
+	      if (loc->disabled_by_cond && loc->enabled)
+		printf_filtered (_("Breakpoint %d.%d is now enabled.\n"),
+				 b->number, loc_num);
+	      loc->disabled_by_cond = false;
+	      loc_num++;
 
 	      /* No need to free the condition agent expression
 		 bytecode (if we have one).  We will handle this
@@ -873,29 +921,37 @@ set_breakpoint_condition (struct breakpoint *b, const char *exp,
 	{
 	  /* Parse and set condition expressions.  We make two passes.
 	     In the first, we parse the condition string to see if it
-	     is valid in all locations.  If so, the condition would be
-	     accepted.  So we go ahead and set the locations'
-	     conditions.  In case a failing case is found, we throw
+	     is valid in at least one location.  If so, the condition
+	     would be accepted.  So we go ahead and set the locations'
+	     conditions.  In case no valid case is found, we throw
 	     the error and the condition string will be rejected.
 	     This two-pass approach is taken to avoid setting the
 	     state of locations in case of a reject.  */
 	  for (bp_location *loc = b->loc; loc != nullptr; loc = loc->next)
 	    {
-	      const char *arg = exp;
-	      parse_exp_1 (&arg, loc->address,
-			   block_for_pc (loc->address), 0);
-	      if (*arg != 0)
-		error (_("Junk at end of expression"));
+	      try
+		{
+		  const char *arg = exp;
+		  parse_exp_1 (&arg, loc->address,
+			       block_for_pc (loc->address), 0);
+		  if (*arg != 0)
+		    error (_("Junk at end of expression"));
+		  break;
+		}
+	      catch (const gdb_exception_error &e)
+		{
+		  /* Condition string is invalid.  If this happens to
+		     be the last loc, abandon.  */
+		  if (loc->next == nullptr)
+		    throw;
+		}
 	    }
 
-	  /* If we reach here, the condition is valid at all locations.  */
-	  for (bp_location *loc = b->loc; loc != nullptr; loc = loc->next)
-	    {
-	      const char *arg = exp;
-	      loc->cond =
-		parse_exp_1 (&arg, loc->address,
-			     block_for_pc (loc->address), 0);
-	    }
+	  /* If we reach here, the condition is valid at some locations.  */
+          int loc_num = 1;
+          for (bp_location *loc = b->loc; loc != nullptr;
+               loc = loc->next, loc_num++)
+            set_breakpoint_location_condition (exp, loc, b->number, loc_num);
 	}
 
       /* We know that the new condition parsed successfully.  The
@@ -2000,7 +2056,8 @@ should_be_inserted (struct bp_location *bl)
   if (bl->owner->disposition == disp_del_at_next_stop)
     return 0;
 
-  if (!bl->enabled || bl->shlib_disabled || bl->duplicate)
+  if (!bl->enabled || bl->disabled_by_cond
+      || bl->shlib_disabled || bl->duplicate)
     return 0;
 
   if (user_breakpoint_p (bl->owner) && bl->pspace->executing_startup)
@@ -2205,7 +2262,8 @@ build_target_condition_list (struct bp_location *bl)
 	  && is_breakpoint (loc->owner)
 	  && loc->pspace->num == bl->pspace->num
 	  && loc->owner->enable_state == bp_enabled
-	  && loc->enabled)
+	  && loc->enabled
+	  && !loc->disabled_by_cond)
 	{
 	  /* Add the condition to the vector.  This will be used later
 	     to send the conditions to the target.  */
@@ -2395,7 +2453,8 @@ build_target_command_list (struct bp_location *bl)
 	  && is_breakpoint (loc->owner)
 	  && loc->pspace->num == bl->pspace->num
 	  && loc->owner->enable_state == bp_enabled
-	  && loc->enabled)
+	  && loc->enabled
+	  && !loc->disabled_by_cond)
 	{
 	  /* Add the command to the vector.  This will be used later
 	     to send the commands to the target.  */
@@ -5278,7 +5337,7 @@ build_bpstat_chain (const address_space *aspace, CORE_ADDR bp_addr,
 	  if (b->type == bp_hardware_watchpoint && bl != b->loc)
 	    break;
 
-	  if (!bl->enabled || bl->shlib_disabled)
+	  if (!bl->enabled || bl->disabled_by_cond || bl->shlib_disabled)
 	    continue;
 
 	  if (!bpstat_check_location (bl, aspace, bp_addr, ws))
@@ -5985,7 +6044,8 @@ print_one_breakpoint_location (struct breakpoint *b,
      breakpoints with single disabled location.  */
   if (loc == NULL 
       && (b->loc != NULL 
-	  && (b->loc->next != NULL || !b->loc->enabled)))
+	  && (b->loc->next != NULL
+	      || !b->loc->enabled || b->loc->disabled_by_cond)))
     header_of_multiple = 1;
   if (loc == NULL)
     loc = b->loc;
@@ -6016,7 +6076,8 @@ print_one_breakpoint_location (struct breakpoint *b,
   /* 4 */
   annotate_field (3);
   if (part_of_multiple)
-    uiout->field_string ("enabled", loc->enabled ? "y" : "n");
+    uiout->field_string ("enabled",
+			 (loc->enabled && !loc->disabled_by_cond) ? "y" : "n");
   else
     uiout->field_fmt ("enabled", "%c", bpenables[(int) b->enable_state]);
 
@@ -6316,7 +6377,9 @@ print_one_breakpoint (struct breakpoint *b,
 	  && (!is_catchpoint (b) || is_exception_catchpoint (b)
 	      || is_ada_exception_catchpoint (b))
 	  && (allflag
-	      || (b->loc && (b->loc->next || !b->loc->enabled))))
+	      || (b->loc && (b->loc->next
+			     || !b->loc->enabled
+			     || b->loc->disabled_by_cond))))
 	{
 	  gdb::optional<ui_out_emit_list> locations_list;
 
@@ -6958,6 +7021,7 @@ bp_location::bp_location (breakpoint *owner, bp_loc_type type)
   this->cond_bytecode = NULL;
   this->shlib_disabled = 0;
   this->enabled = 1;
+  this->disabled_by_cond = false;
 
   this->loc_type = type;
 
@@ -8766,9 +8830,11 @@ init_breakpoint_sal (struct breakpoint *b, struct gdbarch *gdbarch,
 
   gdb_assert (!sals.empty ());
 
+  int loc_num = 0;
   for (const auto &sal : sals)
     {
       struct bp_location *loc;
+      loc_num++;
 
       if (from_tty)
 	{
@@ -8841,14 +8907,8 @@ init_breakpoint_sal (struct breakpoint *b, struct gdbarch *gdbarch,
 	}
 
       if (b->cond_string)
-	{
-	  const char *arg = b->cond_string;
-
-	  loc->cond = parse_exp_1 (&arg, loc->address,
-				   block_for_pc (loc->address), 0);
-	  if (*arg)
-              error (_("Garbage '%s' follows condition"), arg);
-	}
+	set_breakpoint_location_condition (b->cond_string, loc,
+					   b->number, loc_num);
 
       /* Dynamic printf requires and uses additional arguments on the
 	 command line, otherwise it's an error.  */
@@ -9151,6 +9211,50 @@ find_condition_and_thread (const char *tok, CORE_ADDR pc,
     }
 }
 
+/* Call 'find_condition_and_thread' for each sal in SALS until a parse
+   succeeds.  The parsed values are written to COND_STRING, THREAD,
+   TASK, and REST.  See the comment of 'find_condition_and_thread'
+   for the description of these parameters and INPUT.  */
+
+static void
+find_condition_and_thread_for_sals (const std::vector<symtab_and_line> &sals,
+				    const char *input, char **cond_string,
+				    int *thread, int *task, char **rest)
+{
+  int num_failures = 0;
+  for (auto &sal : sals)
+    {
+      char *cond = nullptr;
+      int thread_id = 0;
+      int task_id = 0;
+      char *remaining = nullptr;
+
+      /* Here we want to parse 'arg' to separate condition from thread
+	 number.  But because parsing happens in a context and the
+	 contexts of sals might be different, try each until there is
+	 success.  Finding one successful parse is sufficient for our
+	 goal.  When setting the breakpoint we'll re-parse the
+	 condition in the context of each sal.  */
+      try
+	{
+	  find_condition_and_thread (input, sal.pc, &cond, &thread_id,
+				     &task_id, &remaining);
+	  *cond_string = cond;
+	  *thread = thread_id;
+	  *task = task_id;
+	  *rest = remaining;
+	  break;
+	}
+      catch (const gdb_exception_error &e)
+	{
+	  num_failures++;
+	  /* If no sal remains, do not continue.  */
+	  if (num_failures == sals.size ())
+	    throw;
+	}
+    }
+}
+
 /* Decode a static tracepoint marker spec.  */
 
 static std::vector<symtab_and_line>
@@ -9314,13 +9418,8 @@ create_breakpoint (struct gdbarch *gdbarch,
 
 	  const linespec_sals &lsal = canonical.lsals[0];
 
-	  /* Here we only parse 'arg' to separate condition
-	     from thread number, so parsing in context of first
-	     sal is OK.  When setting the breakpoint we'll
-	     re-parse it in context of each sal.  */
-
-	  find_condition_and_thread (extra_string, lsal.sals[0].pc,
-				     &cond, &thread, &task, &rest);
+	  find_condition_and_thread_for_sals (lsal.sals, extra_string,
+					      &cond, &thread, &task, &rest);
 	  cond_string_copy.reset (cond);
 	  extra_string_copy.reset (rest);
         }
@@ -13434,6 +13533,9 @@ locations_are_equal (struct bp_location *a, struct bp_location *b)
       if (a->enabled != b->enabled)
 	return 0;
 
+      if (a->disabled_by_cond != b->disabled_by_cond)
+	return 0;
+
       a = a->next;
       b = b->next;
     }
@@ -13541,10 +13643,7 @@ update_breakpoint_locations (struct breakpoint *b,
 	    }
 	  catch (const gdb_exception_error &e)
 	    {
-	      warning (_("failed to reevaluate condition "
-			 "for breakpoint %d: %s"), 
-		       b->number, e.what ());
-	      new_loc->enabled = 0;
+	      new_loc->disabled_by_cond = true;
 	    }
 	}
 
@@ -13569,7 +13668,7 @@ update_breakpoint_locations (struct breakpoint *b,
 
     for (; e; e = e->next)
       {
-	if (!e->enabled && e->function_name)
+	if ((!e->enabled || e->disabled_by_cond) && e->function_name)
 	  {
 	    struct bp_location *l = b->loc;
 	    if (have_ambiguous_names)
@@ -13585,7 +13684,8 @@ update_breakpoint_locations (struct breakpoint *b,
 		       enough.  */
 		    if (breakpoint_locations_match (e, l, true))
 		      {
-			l->enabled = 0;
+			l->enabled = e->enabled;
+			l->disabled_by_cond = e->disabled_by_cond;
 			break;
 		      }
 		  }
@@ -13596,7 +13696,8 @@ update_breakpoint_locations (struct breakpoint *b,
 		  if (l->function_name
 		      && strcmp (e->function_name, l->function_name) == 0)
 		    {
-		      l->enabled = 0;
+		      l->enabled = e->enabled;
+		      l->disabled_by_cond = e->disabled_by_cond;
 		      break;
 		    }
 	      }
@@ -13670,9 +13771,9 @@ location_to_sals (struct breakpoint *b, struct event_location *location,
 	  char *cond_string, *extra_string;
 	  int thread, task;
 
-	  find_condition_and_thread (b->extra_string, sals[0].pc,
-				     &cond_string, &thread, &task,
-				     &extra_string);
+	  find_condition_and_thread_for_sals (sals, b->extra_string,
+					      &cond_string, &thread,
+					      &task, &extra_string);
 	  gdb_assert (b->cond_string == NULL);
 	  if (cond_string)
 	    b->cond_string = cond_string;
@@ -14157,6 +14258,10 @@ enable_disable_bp_num_loc (int bp_num, int loc_num, bool enable)
   struct bp_location *loc = find_location_by_number (bp_num, loc_num);
   if (loc != NULL)
     {
+      if (loc->disabled_by_cond && enable)
+	error(_("Location is disabled because of the condition; "
+		"cannot enable manually."));
+
       if (loc->enabled != enable)
 	{
 	  loc->enabled = enable;
