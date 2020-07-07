@@ -5453,6 +5453,12 @@ prints an error message:
 No symbol "foo" in current context.
 @end smallexample
 
+@item condition -force @var{bnum} @var{expression}
+When the @code{-force} flag is used, define the condition even if
+@var{expression} is invalid in all the current locations of breakpoint
+@var{bpnum}.  This is useful if it is known that @var{expression} will
+be valid for a future shared library location.
+
 @noindent
 @value{GDBN} does
 not actually evaluate @var{expression} at the time the @code{condition}

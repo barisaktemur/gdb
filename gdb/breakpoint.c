@@ -874,7 +874,7 @@ set_breakpoint_location_condition (const char *cond_string, bp_location *loc,
 
 void
 set_breakpoint_condition (struct breakpoint *b, const char *exp,
-			  int from_tty)
+			  int from_tty, bool force)
 {
   if (*exp == 0)
     {
@@ -941,9 +941,11 @@ set_breakpoint_condition (struct breakpoint *b, const char *exp,
 	      catch (const gdb_exception_error &e)
 		{
 		  /* Condition string is invalid.  If this happens to
-		     be the last loc, abandon.  */
+		     be the last loc, abandon (if not forced) or continue
+		     (if forced).  */
 		  if (loc->next == nullptr)
-		    throw;
+		    if (!force)
+		      throw;
 		}
 	    }
 
@@ -1023,6 +1025,18 @@ condition_command (const char *arg, int from_tty)
     error_no_arg (_("breakpoint number"));
 
   p = arg;
+
+  /* Check if the "-force" flag was passed.  */
+  bool force = false;
+  const char *tok = skip_spaces (p);
+  const char *end_tok = skip_to_space (tok);
+  int toklen = end_tok - tok;
+  if (toklen >= 1 && strncmp (tok, "-force", toklen) == 0)
+    {
+      force = true;
+      p = end_tok + 1;
+    }
+
   bnum = get_number (&p);
   if (bnum == 0)
     error (_("Bad breakpoint argument: '%s'"), arg);
@@ -1042,7 +1056,7 @@ condition_command (const char *arg, int from_tty)
 		     " a %s stop condition defined for this breakpoint."),
 		   ext_lang_capitalized_name (extlang));
 	  }
-	set_breakpoint_condition (b, p, from_tty);
+	set_breakpoint_condition (b, p, from_tty, force);
 
 	if (is_breakpoint (b))
 	  update_global_location_list (UGLL_MAY_INSERT);
@@ -15576,8 +15590,10 @@ then no output is printed when it is hit, except what the commands print."));
 
   c = add_com ("condition", class_breakpoint, condition_command, _("\
 Specify breakpoint number N to break only if COND is true.\n\
-Usage is `condition N COND', where N is an integer and COND is an\n\
-expression to be evaluated whenever breakpoint N is reached."));
+Usage is `condition [-force] N COND', where N is an integer and COND\n\
+is an expression to be evaluated whenever breakpoint N is reached.\n\
+With the `-force` flag, the condition is defined even when it is\n\
+invalid for all current locations."));
   set_cmd_completer (c, condition_completer);
 
   c = add_com ("tbreak", class_breakpoint, tbreak_command, _("\
