@@ -407,6 +407,34 @@ private:
   struct objfile *m_objfile;
 };
 
+/* Per-objfile structure recording the addresses in the program space.
+   This object serves two purposes: for ordinary objfiles, it may
+   cache some symbols related to the JIT interface; and for
+   JIT-created objfiles, it holds some information about the
+   jit_code_entry.  */
+
+struct jit_objfile_data
+{
+  jit_objfile_data (struct objfile *objfile)
+    : objfile (objfile)
+  {}
+
+  ~jit_objfile_data ();
+
+  /* Back-link to the objfile. */
+  struct objfile *objfile;
+
+  /* Symbol for __jit_debug_register_code.  */
+  minimal_symbol *register_code = nullptr;
+
+  /* Symbol for __jit_debug_descriptor.  */
+  minimal_symbol *descriptor = nullptr;
+
+  /* Address of struct jit_code_entry in this objfile.  This is only
+     non-zero for objfiles that represent code created by the JIT.  */
+  CORE_ADDR addr = 0;
+};
+
 /* Master structure for keeping track of each file from which
    gdb reads symbols.  There are several ways these get allocated: 1.
    The main symbol file, symfile_objfile, set by the symbol-file command,
@@ -697,6 +725,9 @@ public:
      store these here rather than in struct block.  Static links must be
      allocated on the objfile's obstack.  */
   htab_up static_links;
+
+  /* JIT-related data for this objfile.  */
+  std::unique_ptr<jit_objfile_data> jit_data = nullptr;
 };
 
 /* A deleter for objfile.  */
