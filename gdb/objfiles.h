@@ -407,19 +407,16 @@ private:
   struct objfile *m_objfile;
 };
 
-/* Per-objfile structure recording the addresses in the program space.
-   This object serves two purposes: for ordinary objfiles, it may
-   cache some symbols related to the JIT interface; and for
-   JIT-created objfiles, it holds some information about the
-   jit_code_entry.  */
+/* An objfile that defines the required symbols of the JIT interface has an
+   instance of this type attached to it.  */
 
-struct jit_objfile_data
+struct jiter_objfile_data
 {
-  jit_objfile_data (struct objfile *objfile)
+  jiter_objfile_data (struct objfile *objfile)
     : objfile (objfile)
   {}
 
-  ~jit_objfile_data ();
+  ~jiter_objfile_data ();
 
   /* Back-link to the objfile. */
   struct objfile *objfile;
@@ -429,10 +426,20 @@ struct jit_objfile_data
 
   /* Symbol for __jit_debug_descriptor.  */
   minimal_symbol *descriptor = nullptr;
+};
 
-  /* Address of struct jit_code_entry in this objfile.  This is only
+/* An objfile that is the product of JIT compilation and was registered
+   using the JIT interface has an instance of this type attached to it.  */
+
+struct jited_objfile_data
+{
+  jited_objfile_data (CORE_ADDR addr)
+    : addr (addr)
+  {}
+
+  /* Address of struct jit_code_entry for this objfile.  This is only
      non-zero for objfiles that represent code created by the JIT.  */
-  CORE_ADDR addr = 0;
+  CORE_ADDR addr;
 };
 
 /* Master structure for keeping track of each file from which
@@ -726,8 +733,13 @@ public:
      allocated on the objfile's obstack.  */
   htab_up static_links;
 
-  /* JIT-related data for this objfile.  */
-  std::unique_ptr<jit_objfile_data> jit_data = nullptr;
+  /* JIT-related data for this objfile, if the objfile is a JITer;
+     that is, it produces JITed objfiles.  */
+  std::unique_ptr<jiter_objfile_data> jiter_data = nullptr;
+
+  /* JIT-related data for this objfile, if the objfile is JITed;
+     that is, it was produced by a JITer.  */
+  std::unique_ptr<jited_objfile_data> jited_data = nullptr;
 };
 
 /* A deleter for objfile.  */
