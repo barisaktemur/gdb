@@ -412,14 +412,7 @@ private:
 
 struct jiter_objfile_data
 {
-  jiter_objfile_data (struct objfile *objfile)
-    : objfile (objfile)
-  {}
-
   ~jiter_objfile_data ();
-
-  /* Back-link to the objfile. */
-  struct objfile *objfile;
 
   /* Symbol for __jit_debug_register_code.  */
   minimal_symbol *register_code = nullptr;
