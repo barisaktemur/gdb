@@ -1,0 +1,80 @@
+# Copyright 2020 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# This is a regression test for PR gdb/26877.
+
+tuiterm_env
+
+standard_testfile
+
+if {[use_gdb_stub]} {
+    return 0
+}
+
+if {[build_executable "failed to prepare" ${testfile} ${srcfile}] == -1} {
+    return -1
+}
+
+# Make sure TUI is supported before continuing.
+with_test_prefix "initial check" {
+    Term::clean_restart 24 80 $testfile
+    if {![Term::enter_tui]} {
+	unsupported "TUI not supported"
+	return
+    }
+}
+
+Term::clean_restart 24 80 $testfile
+
+# Create a setting with two inferiors, where both are stopped
+# at a breakpoint at the end of main.  Then resume both.
+set bp [gdb_get_line_number "break-here"]
+gdb_breakpoint "$bp"
+
+with_test_prefix "inferior 1" {
+    gdb_run_cmd
+    gdb_test "" ".*reakpoint \[^\r\n\]+${srcfile}.*" "run until bp"
+}
+
+with_test_prefix "inferior 2" {
+    gdb_test "add-inferior -exec [standard_output_file $testfile]" \
+	"Added inferior 2.*" "add inferior"
+    gdb_test "inferior 2" "Switching to inferior 2.*" "switch"
+    gdb_run_cmd
+    gdb_test "" ".*reakpoint \[^\r\n\]+${srcfile}.*" "run until bp"
+}
+
+gdb_test_no_output "set schedule-multiple on"
+gdb_continue_to_end
+
+# Find out which inferior is current.  It is the inferior that exited.
+set exited_inf [get_integer_valueof {$_inferior} 1 "current inf"]
+
+# Switch to the other inferior and remove the exited one.
+# Bad GDB used to crash when this is done under TUI.
+if {![Term::enter_tui]} {
+    unsupported "TUI not supported"
+    return
+}
+
+if {$exited_inf == 1} {
+    Term::command "inferior 2"
+} else {
+    Term::command "inferior 1"
+}
+
+Term::command "remove-inferiors $exited_inf"
+Term::command "info inferior $exited_inf"
+Term::check_contents "inferior is removed" "No inferiors."
